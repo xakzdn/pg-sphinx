@@ -67,7 +67,7 @@ Datum pg_sphinx_snippet_options(PG_FUNCTION_ARGS);
       }                                         \
   } while(0)
 
-static int fetch_config(sphinx_config *config)
+static int fetch_config(sphinx_config *config, PString *cfg_scheme_or_prefix)
 {
   int result = 0;
   int i;
@@ -77,7 +77,18 @@ static int fetch_config(sphinx_config *config)
   if (SPI_connect() != SPI_OK_CONNECT)
     goto end;
 
-  if (SPI_execute("SELECT \"key\", \"value\" FROM sphinx_config", true, 0) != SPI_OK_SELECT)
+  char sb[] = "SELECT \"key\", \"value\" FROM ";
+  char se[] = "sphinx_config";
+  char *s = palloc(strlen(sb) + (cfg_scheme_or_prefix)->len + strlen(se) + 1);
+  if (!s) {
+    fprintf(stderr, "palloc() failed: insufficient memory!\n");
+    return NULL;
+  }
+  memcpy(s, sb, strlen(sb));
+  memcpy(s+strlen(sb), (cfg_scheme_or_prefix)->str, (cfg_scheme_or_prefix)->len + 1);
+  memcpy(s+strlen(sb)+(cfg_scheme_or_prefix)->len, se, strlen(se) + 1);
+  
+  if (SPI_execute(s, true, 0) != SPI_OK_SELECT)
     goto end;
 
   for (i = 0; i < SPI_processed; ++i)
@@ -105,6 +116,7 @@ static int fetch_config(sphinx_config *config)
   result = 1;
 
 end:
+  pfree(s);
   SPI_finish();
   return result;
 }
@@ -137,10 +149,10 @@ Datum pg_sphinx_select(PG_FUNCTION_ARGS)
         }
       else
         {
-          PString index = {0, 0}, query = {0, 0}, condition = {0, 0}, order = {0, 0}, options = {0, 0};
+          PString index = {0, 0}, query = {0, 0}, condition = {0, 0}, order = {0, 0}, options = {0, 0}, cfg_scheme_or_prefix = {0, 0};
           int offset, limit;
           sphinx_config config;
-
+          
           TO_PSTRING(index,     PG_GETARG_DATUM(0), 0);
           TO_PSTRING(query,     PG_GETARG_DATUM(1), 0);
           TO_PSTRING(condition, PG_GETARG_DATUM(2), PG_ARGISNULL(2));
@@ -148,10 +160,12 @@ Datum pg_sphinx_select(PG_FUNCTION_ARGS)
           offset = PG_ARGISNULL(4) ?  0 : PG_GETARG_UINT32(4);
           limit  = PG_ARGISNULL(5) ? 20 : PG_GETARG_UINT32(5);
           TO_PSTRING(options,   PG_GETARG_DATUM(6), PG_ARGISNULL(6));
+          TO_PSTRING(cfg_scheme_or_prefix,    PG_GETARG_DATUM(7), PG_ARGISNULL(7));
 
-          fetch_config(&config);
+          fetch_config(&config, &cfg_scheme_or_prefix);
 
-          funcctx->user_fctx = sphinx_select(&config, &index, &query, &condition, &order, offset, limit, &options, &error);
+          funcctx->user_fctx = sphinx_select(&config, &index, &query, &condition, &order, offset, limit, &options, 
+            &cfg_scheme_or_prefix, &error);
         }
 
       if (error) {
@@ -222,7 +236,7 @@ static int array_to_dict(ArrayType *input, Dict *dict)
 
 Datum pg_sphinx_replace(PG_FUNCTION_ARGS)
 {
-  PString index = {0, 0};
+  PString index = {0, 0}, cfg_scheme_or_prefix = {0, 0};
   int id;
   ArrayType *input;
   char *error = NULL;
@@ -239,8 +253,10 @@ Datum pg_sphinx_replace(PG_FUNCTION_ARGS)
   if (array_to_dict(input, &data))
     PG_RETURN_VOID();
 
-  fetch_config(&config);
-  sphinx_replace(&config, &index, id, &data, &error);
+  TO_PSTRING(cfg_scheme_or_prefix, PG_GETARG_DATUM(3), PG_ARGISNULL(3));
+
+  fetch_config(&config, &cfg_scheme_or_prefix);
+  sphinx_replace(&config, &index, id, &data, &cfg_scheme_or_prefix, &error);
   if (error) {
     elog(ERROR, "%s", error);
     free(error);
@@ -254,7 +270,7 @@ Datum pg_sphinx_replace(PG_FUNCTION_ARGS)
 
 Datum pg_sphinx_delete(PG_FUNCTION_ARGS)
 {
-  PString index = {0, 0};
+  PString index = {0, 0}, cfg_scheme_or_prefix = {0, 0};
   int id;
   char *error = NULL;
   sphinx_config config;
@@ -264,9 +280,10 @@ Datum pg_sphinx_delete(PG_FUNCTION_ARGS)
 
   TO_PSTRING(index, PG_GETARG_DATUM(0), 0);
   id = PG_GETARG_UINT32(1);
-
-  fetch_config(&config);
-  sphinx_delete(&config, &index, id, &error);
+  TO_PSTRING(cfg_scheme_or_prefix,    PG_GETARG_DATUM(2), PG_ARGISNULL(2));
+  
+  fetch_config(&config, &cfg_scheme_or_prefix);
+  sphinx_delete(&config, &index, id, &cfg_scheme_or_prefix, &error);
   if (error) {
     elog(ERROR, "%s", error);
     free(error);
@@ -289,7 +306,7 @@ static void return_text(void *data, size_t size, void *user_data)
 
 Datum pg_sphinx_snippet(PG_FUNCTION_ARGS)
 {
-  PString index = {0, 0}, match = {0, 0}, data = {0, 0};
+  PString index = {0, 0}, match = {0, 0}, data = {0, 0}, cfg_scheme_or_prefix = {0, 0};
 
   PString option_names[2] = {PSTRING_CONST("before_match"), PSTRING_CONST("after_match")};
   PString option_values[2] = {{0, 0}, {0, 0}};
@@ -307,9 +324,10 @@ Datum pg_sphinx_snippet(PG_FUNCTION_ARGS)
   VARCHAR_TO_PSTRING(data,              PG_GETARG_VARCHAR_P(2), 0);
   VARCHAR_TO_PSTRING(options.values[0], PG_GETARG_VARCHAR_P(3), PG_ARGISNULL(3));
   VARCHAR_TO_PSTRING(options.values[1], PG_GETARG_VARCHAR_P(4), PG_ARGISNULL(4));
+  VARCHAR_TO_PSTRING(cfg_scheme_or_prefix,            PG_GETARG_VARCHAR_P(5), PG_ARGISNULL(5));
 
-  fetch_config(&config);
-  sphinx_snippet(&config, &index, &match, &data, &options,
+  fetch_config(&config, &cfg_scheme_or_prefix);
+  sphinx_snippet(&config, &index, &match, &data, &options, &cfg_scheme_or_prefix,
                  return_text, &result_text, &error);
 
   if (error) {
@@ -325,7 +343,7 @@ Datum pg_sphinx_snippet(PG_FUNCTION_ARGS)
 
 Datum pg_sphinx_snippet_options(PG_FUNCTION_ARGS)
 {
-  PString index = {0, 0}, match = {0, 0}, data = {0, 0};
+  PString index = {0, 0}, match = {0, 0}, data = {0, 0}, cfg_scheme_or_prefix = {0, 0};
   ArrayType *input;
   Dict options;
   text *result_text = NULL;
@@ -343,8 +361,10 @@ Datum pg_sphinx_snippet_options(PG_FUNCTION_ARGS)
   if (array_to_dict(input, &options))
     PG_RETURN_NULL();
 
-  fetch_config(&config);
-  sphinx_snippet(&config, &index, &match, &data, &options,
+  VARCHAR_TO_PSTRING(cfg_scheme_or_prefix, PG_GETARG_VARCHAR_P(4), PG_ARGISNULL(4));
+
+  fetch_config(&config, &cfg_scheme_or_prefix);
+  sphinx_snippet(&config, &index, &match, &data, &options, &cfg_scheme_or_prefix,
                  return_text, &result_text, &error);
 
   if (error) {

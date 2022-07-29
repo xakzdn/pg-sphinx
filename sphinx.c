@@ -23,7 +23,8 @@ static SPH_BOOL ensure_sphinx_is_connected(sphinx_config *config, char **error)
   my_bool reconnect;
 
   if (connection)
-    return SPH_TRUE;
+    mysql_close(connection);
+    //return SPH_TRUE;
   
   connection = mysql_init(NULL);
 
@@ -71,6 +72,7 @@ sphinx_context sphinx_select(sphinx_config *config,
                              int offset,
                              int limit,
                              const PString *options,
+                             const PString *cfg_scheme_or_prefix,
                              char **error)
 {
   StringBuilder *sb;
@@ -158,6 +160,7 @@ void sphinx_replace(sphinx_config *config,
                     const PString *index,
                     int id,
                     const Dict *data,
+                    const PString *cfg_scheme_or_prefix,
                     char **error)
 {
   size_t i;
@@ -195,6 +198,7 @@ void sphinx_replace(sphinx_config *config,
 void sphinx_delete(sphinx_config *config,
                    const PString *index,
                    int id,
+                   const PString *cfg_scheme_or_prefix,
                    char **error)
 {
   StringBuilder *sb;
@@ -220,6 +224,7 @@ void sphinx_snippet(sphinx_config *config,
                     const PString *match,
                     const PString *data,
                     const Dict *options,
+                    const PString *cfg_scheme_or_prefix,
                     return_data_callback callback,
                     void *user_data,
                     char **error)
