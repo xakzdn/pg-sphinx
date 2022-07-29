@@ -2,7 +2,7 @@
 
   Pg-sphinx is an extension for PostgreSQL which allows to integrate Sphinx search engine \ Manticore fork with cfg_scheme_or_prefix.
   #+BEGIN_SRC sql
-  SELECT "key", "value" FROM [cfg_scheme_or_prefix]sphinx_config
+  SELECT "key", "value" FROM cfg_scheme_or_prefix+sphinx_config
   #+END_SRC
 
 ** Installation
@@ -56,7 +56,7 @@
       /*offset*/               int,
       /*limit*/                int,
       /*options*/              varchar,
-	  /*cfg_scheme_or_prefix*/ varchar)
+      /*cfg_scheme_or_prefix*/ varchar)
   #+END_SRC
 
   Returns pairs (id, weight).
@@ -68,7 +68,7 @@
       /*index*/                varchar,
       /*id*/                   int,
       /*data*/                 varchar[],
-	  /*cfg_scheme_or_prefix*/ varchar)
+      /*cfg_scheme_or_prefix*/ varchar)
   #+END_SRC
 
   Updates document with specified id. Data array must have following format:
@@ -80,7 +80,7 @@
   sphinx_delete(
       /*index*/                varchar,
       /*id*/                   int,
-	  /*cfg_scheme_or_prefix*/ varchar)
+      /*cfg_scheme_or_prefix*/ varchar)
   #+END_SRC
 
   Removes specified document.
