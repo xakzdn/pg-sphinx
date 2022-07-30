@@ -17,15 +17,25 @@ void default_config(sphinx_config *config)
 }
 
 static MYSQL *connection = NULL;
+static sphinx_config *active_config;
 
 static SPH_BOOL ensure_sphinx_is_connected(sphinx_config *config, char **error)
 {
   my_bool reconnect;
 
-  if (connection)
-    mysql_close(connection);
-    //return SPH_TRUE;
-  
+  if (connection) {
+    if ( 
+        ( active_config->port == config->port ) &&
+        ( strcmp(active_config->host, config->host) ) && 
+        ( strcmp(active_config->username, config->username) ) && 
+        ( strcmp(active_config->password, config->password) )
+       )
+      return SPH_TRUE;
+    else
+      mysql_close(connection);
+  }
+
+  active_config = config;
   connection = mysql_init(NULL);
 
   reconnect = 1;
