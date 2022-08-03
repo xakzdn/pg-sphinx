@@ -72,12 +72,14 @@
   #+END_SRC
 
   Insert document. Data array must have following format:
-  Fields:
+  
+  Fields:  
   ARRAY['id', 'field1', 'field2', ..., 'fieldN']
-  Values:
+  
+  Values:  
   ARRAY['1', 'value_for_field1', 'value_for_field2', ..., 'value_for_fieldN']
   
-  *** Update data
+*** Update data
 
   #+BEGIN_SRC sql
   sphinx_replace(
