@@ -61,7 +61,23 @@
 
   Returns pairs (id, weight).
 
-*** Update data
+*** Insert data
+
+  #+BEGIN_SRC sql
+  sphinx_insert(
+      /*index*/                varchar,                                                 
+      /*fields*/               varchar[],                                  
+      /*values*/               varchar[],  
+      /*cfg_scheme_or_prefix*/ varchar)
+  #+END_SRC
+
+  Insert document. Data array must have following format:
+  Fields:
+  ARRAY['id', 'field1', 'field2', ..., 'fieldN']
+  Values:
+  ARRAY['1', 'value_for_field1', 'value_for_field2', ..., 'value_for_fieldN']
+  
+  *** Update data
 
   #+BEGIN_SRC sql
   sphinx_replace(
