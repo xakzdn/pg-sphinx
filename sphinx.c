@@ -219,7 +219,7 @@ void sphinx_insert(sphinx_config *config,
       string_builder_append(sb, ")");
     }
   if (mysql_query(connection, sb->str))
-    REPORT(error, "Can't execute replace query: ", sb->str, "; ", mysql_error(connection));
+    REPORT(error, "Can't execute insert query: ", sb->str, "; ", mysql_error(connection));
 
   string_builder_free(sb);
 }
