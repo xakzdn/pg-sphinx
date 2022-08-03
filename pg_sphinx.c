@@ -21,6 +21,9 @@ PG_MODULE_MAGIC;
 PG_FUNCTION_INFO_V1(pg_sphinx_select);
 Datum pg_sphinx_select(PG_FUNCTION_ARGS);
 
+PG_FUNCTION_INFO_V1(pg_sphinx_insert);
+Datum pg_sphinx_insert(PG_FUNCTION_ARGS);
+
 PG_FUNCTION_INFO_V1(pg_sphinx_replace);
 Datum pg_sphinx_replace(PG_FUNCTION_ARGS);
 
@@ -75,7 +78,7 @@ static int fetch_config(sphinx_config *config, PString *cfg_scheme_or_prefix)
   default_config(config);
 
   if (SPI_connect() != SPI_OK_CONNECT)
-    goto end;
+    goto end2;
 
   char sb[] = "SELECT \"key\", \"value\" FROM ";
   char se[] = "sphinx_config";
@@ -117,6 +120,7 @@ static int fetch_config(sphinx_config *config, PString *cfg_scheme_or_prefix)
 
 end:
   pfree(s);
+end2:
   SPI_finish();
   return result;
 }
@@ -211,7 +215,7 @@ static int array_to_dict(ArrayType *input, Dict *dict)
 
   // one dimensional even length array
   if (ARR_NDIM(input) != 1 || ARR_DIMS(input)[0] % 2 == 1)
-    return -1;
+    return -1; //true
 
   dict->len = ARR_DIMS(input)[0] / 2;
   dict->names = palloc(sizeof(PString) * dict->len);
@@ -231,7 +235,69 @@ static int array_to_dict(ArrayType *input, Dict *dict)
         TO_PSTRING(dict->values[i / 2], value, isnull);
     }
   array_free_iterator(iter);
-  return 0;
+  return 0; //false
+}
+
+static int array_to_simpledict(ArrayType *input, SimpleDict *sd)
+{
+  ArrayIterator iter;
+  size_t i;
+  Datum value;
+  bool isnull;
+
+  // TODO: check element type. ARR_ELEMTYPE(input)
+
+  //if length of array is 0 then exit
+  if (ARR_DIMS(input)[0] == 0)
+    return -1; //true
+
+  sd->len = ARR_DIMS(input)[0];
+  sd->values = palloc(sizeof(PString) * sd->len);
+
+#if PG_VERSION_NUM >= 90500
+  iter = array_create_iterator(input, 0, NULL);
+#else
+  iter = array_create_iterator(input, 0);
+#endif
+  i = 0;
+  for (; array_iterate(iter, &value, &isnull); ++i)
+    {
+      TO_PSTRING(sd->values[i], value, isnull);
+    }
+  array_free_iterator(iter);
+  return 0; //false
+}
+
+Datum pg_sphinx_insert(PG_FUNCTION_ARGS)
+{
+  PString index = {0, 0}, cfg_scheme_or_prefix = {0, 0};
+  char *error = NULL;
+  sphinx_config config;
+  ArrayType *fields, *values;
+  SimpleDict f, v;
+  
+  if (PG_ARGISNULL(0) || PG_ARGISNULL(1) || PG_ARGISNULL(2))
+    PG_RETURN_VOID();
+
+  TO_PSTRING(index, PG_GETARG_DATUM(0), 0);                              //first arg
+  fields = PG_GETARG_ARRAYTYPE_P(1);                                     //second arg
+  values = PG_GETARG_ARRAYTYPE_P(2);                                     //third arg
+  TO_PSTRING(cfg_scheme_or_prefix, PG_GETARG_DATUM(3), PG_ARGISNULL(3)); //fourth arg
+  fetch_config(&config, &cfg_scheme_or_prefix);
+  
+  if (array_to_simpledict(fields, &f))
+    PG_RETURN_VOID();
+  if (array_to_simpledict(values, &v))
+    PG_RETURN_VOID();
+  
+  sphinx_insert(&config, &index, &f, &v, &cfg_scheme_or_prefix, &error);
+  if (error) {
+    elog(ERROR, "%s", error);
+    free(error);
+  }
+  pfree(f.values);
+  pfree(v.values);
+  PG_RETURN_VOID();
 }
 
 Datum pg_sphinx_replace(PG_FUNCTION_ARGS)

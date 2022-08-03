@@ -13,6 +13,15 @@ RETURNS SETOF sphinx_search_result
 AS 'sphinx', 'pg_sphinx_select'
 LANGUAGE C IMMUTABLE;
 
+CREATE OR REPLACE FUNCTION sphinx_insert(
+  /*index*/                   varchar,
+  /*fields*/                  varchar[],
+  /*values*/                  varchar[],
+  /*cfg_scheme_or_prefix*/    varchar)
+RETURNS VOID
+AS 'sphinx', 'pg_sphinx_insert'
+LANGUAGE C IMMUTABLE;
+
 CREATE OR REPLACE FUNCTION sphinx_replace(
   /*index*/                   varchar,
   /*id*/                      int,

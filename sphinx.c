@@ -173,6 +173,57 @@ void sphinx_context_free(sphinx_context ctx)
     }
 }
 
+void sphinx_insert(sphinx_config *config,
+                    const PString *index,
+                    const SimpleDict *fields,
+                    const SimpleDict *values,
+                    const PString *cfg_scheme_or_prefix,
+                    char **error)
+{
+  size_t i,j;
+  StringBuilder *sb;
+
+  if (!ensure_sphinx_is_connected(config, error))
+    return;
+
+  sb = string_builder_new();
+  string_builder_append(sb, "INSERT INTO ");
+  string_builder_append(sb, config->prefix);
+  string_builder_append_pstr(sb, index);
+  //Fields:
+  for (i = 0; i < fields->len; i++)
+    {
+	  if (i == 0) {
+        string_builder_append(sb, "(`");
+        string_builder_append_pstr(sb, &fields->values[i]);
+      }
+	  else {
+        string_builder_append(sb, ",`");
+        string_builder_append_pstr(sb, &fields->values[i]);
+      }
+      string_builder_append(sb, "`");
+    }
+  string_builder_append(sb, ") VALUES");
+  //Values:
+  for (i = 0; i < values->len / fields->len; i++)
+    {
+      if (i > 0)
+        string_builder_append(sb, ",");
+      string_builder_append(sb, "(");
+      for (j = 0; j < fields->len; j++)
+        {
+          if (j > 0)
+            string_builder_append(sb, ", ");
+          string_builder_append_sql_string(sb, &values->values[(i*fields->len)+j]);
+        }
+      string_builder_append(sb, ")");
+    }
+  if (mysql_query(connection, sb->str))
+    REPORT(error, "Can't execute replace query: ", sb->str, "; ", mysql_error(connection));
+
+  string_builder_free(sb);
+}
+
 void sphinx_replace(sphinx_config *config,
                     const PString *index,
                     int id,

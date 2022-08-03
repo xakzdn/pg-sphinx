@@ -11,5 +11,13 @@ struct _Dict {
   PString *values;
 };
 
+typedef struct _SimpleDict SimpleDict;
+
+struct _SimpleDict {
+  size_t len;
+  PString *values;
+};
+
+
 #endif
 
